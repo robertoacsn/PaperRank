@@ -8,37 +8,31 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 from sklearn.decomposition import TruncatedSVD
 
-# ==========================================
-# 1. CONFIGURAÇÕES DA PÁGINA WEB
-# ==========================================
+
+# config pagina web
 st.set_page_config(page_title="PaperRank Dashboard", layout="wide")
 st.title("PaperRank: Inteligência Híbrida 🚀")
 st.markdown("Painel analítico combinando Teoria dos Grafos, BM25, LSI e Critérios de Pesquisa.")
 
-# ==========================================
-# 2. LEITURA DINÂMICA DE DADOS
-# ==========================================
+# leitura dados
 arquivos_csv = glob.glob('paperrank_*.csv')
 if not arquivos_csv:
     st.error("Nenhum arquivo de dados encontrado. Rode o 'search.py' primeiro!")
     st.stop()
 
-# Pega o arquivo mais recente gerado pelo robô
+# pega arquivo mais recente
 arquivo_mais_recente = max(arquivos_csv, key=os.path.getctime)
 st.success(f"Lendo base de dados mais recente: **{os.path.basename(arquivo_mais_recente)}**")
 
 df = pd.read_csv(arquivo_mais_recente, sep=';')
 
-# ==========================================
-# 3. INTERFACE DOS DADOS BRUTOS
-# ==========================================
+
+# interface
 st.subheader("Top Artigos por Super Score (PageRank + Velocidade)")
 colunas_exibicao = ['Title', 'Year', 'Citations', 'Citation_Velocity', 'PageRank', 'Super_Score']
 st.dataframe(df[colunas_exibicao].head(10))
 
-# ==========================================
-# 4. A CAMADA DO PESQUISADOR (SIDEBAR VISUAL)
-# ==========================================
+# camada pesquisador
 st.sidebar.header("⚙️ Camada do Pesquisador")
 st.sidebar.markdown("Critérios humanos que multiplicam ou penalizam o ranqueamento semântico (BM25):")
 
@@ -48,9 +42,7 @@ termos_negativos = ['review', 'survey', 'challenges', 'barriers', 'limitations',
 st.sidebar.success(f"**Termos Prioritários (Peso 2.0x):**\n\n{', '.join(termos_positivos)}")
 st.sidebar.error(f"**Termos Penalizados (Peso 0.2x):**\n\n{', '.join(termos_negativos)}")
 
-# ==========================================
-# 5. O MOTOR DE BUSCA (BM25 + LSI HÍBRIDO)
-# ==========================================
+# motor de busca
 df_valid = df.dropna(subset=['Abstract'])
 gold_df = df_valid.head(50).copy()
 
@@ -99,9 +91,7 @@ for i, comp in enumerate(lsi_model.components_):
     nome_topico = " + ".join(top_words) 
     topicos_nomes.append(f"Tópico {i+1}: {nome_topico}")
 
-# ==========================================
-# 6. DESENHANDO O GRÁFICO NA PÁGINA WEB
-# ==========================================
+# grafico pagina web
 st.subheader("Macrotendências Híbridas (BM25 + PageRank + Pesos)")
 
 fig, ax = plt.subplots(figsize=(10, 6))

@@ -4,16 +4,16 @@ import networkx as nx
 import time
 import os
 from datetime import datetime
+from dotenv import load_dotenv
 from requests import Session
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
-# ==========================================
-# CONFIGURAÇÕES E CREDENCIAIS
-# ==========================================
-API_KEY = "s2k-XPslyqqALJIt72WXbB55jvhuaextkUwpZdTAO063" 
+# Config
+load_dotenv()
+API_KEY = os.getenv("API_KEY")
 BASE_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 DESIRED_FIELDS = "title,abstract,year,references,citationCount"
 
@@ -22,9 +22,8 @@ retries = Retry(total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503,
 http.mount('https://', HTTPAdapter(max_retries=retries))
 headers = {"x-api-key": API_KEY}
 
-# ==========================================
-# FUNÇÕES DO PIPELINE
-# ==========================================
+
+# Funcoes
 def extrair_artigos_da_api(query, limit=100):
     """Bate na API e devolve a lista de artigos brutos (Janela 2021-2026)"""
     print(f"Buscando dados para: '{query}'...")
@@ -32,7 +31,7 @@ def extrair_artigos_da_api(query, limit=100):
         "query": query,
         "fieldsOfStudy": "Computer Science",
         "fields": DESIRED_FIELDS,
-        "year": "2021-2026", # <--- CORREÇÃO TEMPORAL AQUI!
+        "year": "2021-2026",
         "limit": limit
     }
     
@@ -48,7 +47,7 @@ def extrair_artigos_da_api(query, limit=100):
         return []
 
 def descobrir_tendencia(articles_list):
-    """Usa NLP para achar a palavra mais quente, ignorando histórico"""
+
     abstracts = [a.get('abstract') for a in articles_list if a.get('abstract')]
     if not abstracts:
         return "machine learning"
@@ -79,7 +78,6 @@ def descobrir_tendencia(articles_list):
     return feature_names[top_indices[0]]
 
 def construir_grafo_e_tabela(articles_list):
-    """Calcula o PageRank e gera a tabela Pandas com Velocidade de Citação Real"""
     structured_data = []
     grafo = nx.DiGraph()
     
@@ -118,7 +116,7 @@ def construir_grafo_e_tabela(articles_list):
     df = pd.DataFrame(structured_data)
     current_year = datetime.now().year
     
-    # Engenharia de Features (Agora com Idade real!)
+    # features
     df['Article_Age'] = (current_year - df['Year']).clip(lower=1)
     df['Citation_Velocity'] = df['Citations'] / df['Article_Age']
     df['PageRank'] = df['paperId'].map(pagerank_scores).fillna(0)
@@ -136,9 +134,6 @@ def construir_grafo_e_tabela(articles_list):
     
     return df.sort_values(by='Super_Score', ascending=False)
 
-# ==========================================
-# O CÉREBRO DO ROBÔ
-# ==========================================
 if __name__ == "__main__":
     print("=== ESTÁGIO 1: O BATEDOR (VISÃO GLOBAL) ===")
     artigos_globais = extrair_artigos_da_api("Computer Science", limit=100)
@@ -153,12 +148,12 @@ if __name__ == "__main__":
     df_final = construir_grafo_e_tabela(artigos_nicho)
     
     if not df_final.empty:
-        # Geração do Carimbo (ID Único)
+        # gera arquivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         nome_tendencia = tendencia.replace(' ', '_')
         nome_arquivo_csv = f"paperrank_{nome_tendencia}_{timestamp}.csv"
         
-        # Salva o arquivo CSV com nome exclusivo daquela execução
+        # salva CSV
         df_final.to_csv(nome_arquivo_csv, index=False, encoding='utf-8-sig', sep=';')
         
         print(f"\nSucesso! Arquivo '{nome_arquivo_csv}' salvo.")

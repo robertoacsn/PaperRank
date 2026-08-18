@@ -1,0 +1,6 @@
+.env
+*.csv
+historico_tendencias.txt
+.vscode/
+teste_grafo.py
+__pycache__/
