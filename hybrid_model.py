@@ -12,12 +12,12 @@ def extrair_macrotendencias(df, termos_positivos, termos_negativos, num_topicos=
                       'research', 'based', 'approach', 'article', 'this', 'we', 'show', 'data']
     stop_words_finais = list(ENGLISH_STOP_WORDS.union(lixo_academico))
 
-    # 1. Frequência Bruta
+    # Frequência Bruta
     vectorizer = CountVectorizer(ngram_range=(2, 3), stop_words=stop_words_finais, max_df=0.60, min_df=2)
     tf_matrix = vectorizer.fit_transform(df['Abstract']).toarray()
     feature_names = vectorizer.get_feature_names_out()
 
-    # 2. Matemática BM25
+    # Matemática BM25
     k1 = 1.5 
     b = 0.75 
     doc_lengths = tf_matrix.sum(axis=1)
@@ -28,7 +28,7 @@ def extrair_macrotendencias(df, termos_positivos, termos_negativos, num_topicos=
     length_penalty = (1 - b + b * (doc_lengths / avgdl)).reshape(-1, 1)
     bm25_matrix = idf * (tf_matrix * (k1 + 1)) / (tf_matrix + k1 * length_penalty)
 
-    # 3. Aplicação dos Pesos do Pesquisador (Camada Híbrida)
+    # Aplicação dos Pesos do Pesquisador (Camada Híbrida)
     pesos_pesquisador = np.ones(len(feature_names))
     for i, term in enumerate(feature_names):
         if any(pos in term for pos in termos_positivos):
@@ -40,7 +40,7 @@ def extrair_macrotendencias(df, termos_positivos, termos_negativos, num_topicos=
     super_scores = df['Super_Score'].values
     weighted_bm25 = bm25_hibrido * super_scores[:, np.newaxis]
 
-    # 4. Modelagem LSI (Tópicos)
+    # Modelagem LSI (Tópicos)
     lsi_model = TruncatedSVD(n_components=num_topicos, random_state=42)
     lsi_matrix = lsi_model.fit_transform(weighted_bm25)
 

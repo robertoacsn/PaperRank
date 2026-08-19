@@ -13,7 +13,8 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
-# Config
+# CONFIGURAÇÕES E CREDENCIAIS
+
 load_dotenv()
 API_KEY = os.getenv("API_KEY")
 BASE_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
@@ -24,8 +25,8 @@ retries = Retry(total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503,
 http.mount('https://', HTTPAdapter(max_retries=retries))
 headers = {"x-api-key": API_KEY}
 
+# FUNÇÕES PRINCIPAIS
 
-# Funcoes
 def extrair_artigos_da_api(query, limit=100):
     """Bate na API e devolve a lista de artigos brutos (Janela 2021-2026)"""
     print(f"Buscando dados para: '{query}'...")
@@ -61,10 +62,24 @@ def descobrir_tendencia_temporal(articles_list):
             
     anos_disponiveis = sorted(list(textos_por_ano.keys()))
     
-    # Se só tivermos 1 ano de dados, caímos para o TF-IDF simples antigo
+    # Se só tiver 1 ano de dados, a Regressão Linear falha. 
+    # Fallback: Usamos o TF-IDF clássico para pegar o termo de maior volume daquele ano.
     if len(anos_disponiveis) < 2:
-        # ... (Mantém o seu código TF-IDF original aqui como plano B)
-        return "machine learning" 
+        todos_resumos = [resumo for lista in textos_por_ano.values() for resumo in lista]
+        
+        if not todos_resumos:
+            return "computer science"
+            
+        lixo_academico = ['paper', 'presents', 'study', 'results', 'proposed', 'method']
+        stop_words_finais = list(ENGLISH_STOP_WORDS.union(lixo_academico))
+        
+        vec_fallback = TfidfVectorizer(ngram_range=(2, 3), stop_words=stop_words_finais, max_df=0.8, min_df=2)
+        tfidf_matrix_fallback = vec_fallback.fit_transform(todos_resumos)
+        
+        avg_scores = tfidf_matrix_fallback.mean(axis=0).A1
+        top_indice = avg_scores.argsort()[::-1][0]
+        
+        return vec_fallback.get_feature_names_out()[top_indice]
 
     # 2. Prepara o motor de NLP
     lixo_academico = ['paper', 'presents', 'study', 'results', 'proposed', 'method']
@@ -83,32 +98,34 @@ def descobrir_tendencia_temporal(articles_list):
         tfidf_do_ano = vectorizer.transform(textos_do_ano).mean(axis=0).A1
         matriz_evolucao.append(tfidf_do_ano)
         
-    matriz_evolucao = np.array(matriz_evolucao) # Shape: (Qtd_Anos, Qtd_Termos)
+    matriz_evolucao = np.array(matriz_evolucao) # (Qtd_Anos, Qtd_Termos)
     
-    # 4. A MATEMÁTICA TEMPORAL (Regressão Linear)
-    melhor_termo = "machine learning"
-    maior_aceleracao = -9999
+    # 4. Regressão Linear
+    melhor_termo = None
+    maior_aceleracao = -float('inf') # Infinito negativo (Padrão matemático)
     
     eixo_x = np.array(anos_disponiveis)
     
     for i, termo in enumerate(termos):
-        eixo_y = matriz_evolucao[:, i] # O histórico de pontuação dessa palavra
+        eixo_y = matriz_evolucao[:, i] 
         
-        # Só analisa termos que de fato apareceram no último ano (para não eleger hype morto)
         if eixo_y[-1] == 0:
             continue
             
-        # Calcula o Coeficiente Angular (Slope) da reta de Grau 1
         slope, intercept = np.polyfit(eixo_x, eixo_y, 1)
         
-        # Encontra a palavra com a maior inclinação positiva
         if slope > maior_aceleracao:
             maior_aceleracao = slope
             melhor_termo = termo
             
+    # Trava de segurança final caso nenhuma palavra tenha passado pelo filtro
+    if melhor_termo is None:
+        return termos[0] if len(termos) > 0 else "computer science"
+        
     return melhor_termo
 
 def construir_grafo_e_tabela(articles_list, peso_pr=0.70, peso_trend=0.30, peso_vel=0.70, peso_cit=0.30):
+    """Constrói a tabela final filtrando nós pendentes e parametrizando os pesos do Super Score"""
     structured_data = []
     grafo = nx.DiGraph()
     
@@ -133,7 +150,6 @@ def construir_grafo_e_tabela(articles_list, peso_pr=0.70, peso_trend=0.30, peso_
         
         for ref in lista_referencias:
             ref_id = ref.get('paperId')
-            # PASSO 2: A Poda da Rede! Só cria a ponte se o artigo referenciado estiver no "Clube VIP"
             if ref_id and (ref_id in ids_validos):
                 grafo.add_edge(origem_id, ref_id)
         
@@ -151,7 +167,7 @@ def construir_grafo_e_tabela(articles_list, peso_pr=0.70, peso_trend=0.30, peso_
     df = pd.DataFrame(structured_data)
     current_year = datetime.now().year
     
-    # features
+    # Features
     df['Article_Age'] = (current_year - df['Year']).clip(lower=1)
     df['Citation_Velocity'] = df['Citations'] / df['Article_Age']
     df['PageRank'] = df['paperId'].map(pagerank_scores).fillna(0)
@@ -160,30 +176,20 @@ def construir_grafo_e_tabela(articles_list, peso_pr=0.70, peso_trend=0.30, peso_
     max_velocity = df['Citation_Velocity'].max() or 1
     max_pr = df['PageRank'].max() or 1
     
-# =======================================================
-    # PARAMETRIZAÇÃO DOS PESOS (ESTUDO DE ABLAÇÃO)
-    # Altere estes valores para testar diferentes perfis
-    # =======================================================
-    # Peso global do Prestígio (Grafos) vs Hype (Tendência)
-    PESO_PAGERANK = 0.70
-    PESO_TREND = 0.30
-    
-    # Composição interna da Tendência (Aceleração vs Volume)
-    PESO_VELOCIDADE = 0.70
-    PESO_CITACOES = 0.30
-    # =======================================================
-    
     # Normalização (Mantendo todos os scores na mesma escala de 0 a 1)
     df['Score_Citations'] = df['Citations'] / max_citations
     df['Score_Velocity'] = df['Citation_Velocity'] / max_velocity
     df['Score_PageRank'] = df['PageRank'] / max_pr
     
-    # O cálculo final agora obedece às variáveis de controle:
+    # O cálculo final agora obedece aos parâmetros recebidos na função:
     df['Score_Trend'] = (df['Score_Velocity'] * peso_vel) + (df['Score_Citations'] * peso_cit)
     df['Super_Score'] = (df['Score_PageRank'] * peso_pr) + (df['Score_Trend'] * peso_trend)
     
     return df.sort_values(by='Super_Score', ascending=False)
 
+# ==========================================
+# EXECUÇÃO PRINCIPAL
+# ==========================================
 if __name__ == "__main__":
     print("=== ESTÁGIO 1: O BATEDOR (VISÃO GLOBAL) ===")
     artigos_globais = extrair_artigos_da_api("Computer Science", limit=100)
@@ -198,15 +204,16 @@ if __name__ == "__main__":
     df_final = construir_grafo_e_tabela(artigos_nicho)
     
     if not df_final.empty:
-        # gera arquivo
+        # Gera arquivo
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         nome_tendencia = tendencia.replace(' ', '_')
         nome_arquivo_csv = f"paperrank_{nome_tendencia}_{timestamp}.csv"
         nome_arquivo_log = f"paperrank_{nome_tendencia}_{timestamp}_parametros.json"
         
-        # salva CSV
+        # Salva CSV
         df_final.to_csv(nome_arquivo_csv, index=False, encoding='utf-8-sig', sep=';')
 
+        # Salva o Log de Parâmetros (Rastreabilidade Científica)
         parametros_usados = {
             "data_execucao": timestamp,
             "tendencia_alvo": tendencia,
@@ -217,6 +224,7 @@ if __name__ == "__main__":
         }
         with open(nome_arquivo_log, "w", encoding="utf-8") as f:
             json.dump(parametros_usados, f, indent=4)
+            
         print(f"\nSucesso! Arquivo '{nome_arquivo_csv}' salvo.")
         print(f"Top 1 Artigo: {df_final.iloc[0]['Title'][:70]}...")
         

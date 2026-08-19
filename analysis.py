@@ -2,7 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import glob
 import os
-from hybrid_model import extrair_macrotendencias # <--- Importando o Motor!
+from hybrid_model import extrair_macrotendencias
 
 print("Procurando a última extração do PaperRank...")
 arquivos_csv = glob.glob('paperrank_*.csv')
@@ -23,7 +23,6 @@ termos_negativos = ['review', 'survey', 'challenges', 'barriers', 'limitations',
 
 print(f"Calculando Modelo Híbrido para {len(gold_df)} artigos...\n")
 
-# O CÓDIGO GIGANTE FOI REDUZIDO A ESTA ÚNICA LINHA:
 topicos_nomes, topicos_pesos = extrair_macrotendencias(gold_df, termos_positivos, termos_negativos)
 
 print("\n--- OS GRANDES TÓPICOS DO PAPERRANK HÍBRIDO ---")

@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import glob
 import os
-from hybrid_model import extrair_macrotendencias # <--- Importando o Motor!
+from hybrid_model import extrair_macrotendencias
 
 st.set_page_config(page_title="PaperRank Dashboard", layout="wide")
 st.title("PaperRank: Inteligência Híbrida 🚀")
@@ -31,7 +31,7 @@ termos_negativos = ['review', 'survey', 'challenges', 'barriers', 'limitations',
 st.sidebar.success(f"**Termos Prioritários (Peso 2.0x):**\n\n{', '.join(termos_positivos)}")
 st.sidebar.error(f"**Termos Penalizados (Peso 0.2x):**\n\n{', '.join(termos_negativos)}")
 
-# PROCESSAMENTO HÍBRIDO REDUZIDO A UMA LINHA
+# PROCESSAMENTO HÍBRIDO
 df_valid = df.dropna(subset=['Abstract'])
 gold_df = df_valid.head(50).copy()
 
