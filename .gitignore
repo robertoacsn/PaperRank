@@ -1,5 +1,6 @@
 .env
 *.csv
+*.json
 historico_tendencias.txt
 .vscode/
 teste_grafo.py
